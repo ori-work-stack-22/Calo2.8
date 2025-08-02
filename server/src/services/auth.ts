@@ -484,6 +484,7 @@ export class AuthService {
       
       // Send code via email
       await this.sendPasswordResetCodeEmail(email, resetCode);
+    }
 
     if (!user.email_verified) {
       throw new Error("Please verify your email address first");
@@ -794,3 +795,7 @@ export class AuthService {
       path: "/",
     };
       const transporter = nodemailer.createTransport({
+      }
+      )
+  }
+}
