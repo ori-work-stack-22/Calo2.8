@@ -87,6 +87,15 @@ export default function PaymentPlan() {
   const router = useRouter();
   const dispatch = useDispatch<AppDispatch>();
   const { user } = useSelector((state: RootState) => state.auth);
+  const { mode, currentPlan } = useLocalSearchParams();
+
+  // Filter plans based on mode
+  const availablePlans = useMemo(() => {
+    if (mode === "change" && currentPlan) {
+      return plans.filter(plan => plan.id !== currentPlan);
+    }
+    return plans;
+  }, [mode, currentPlan]);
 
   const detectCardType = (cardNumber: string) => {
     const number = cardNumber.replace(/\s/g, "");
@@ -227,10 +236,20 @@ export default function PaymentPlan() {
   };
 
   const handleGoBack = () => {
-    router.push("/signup");
+    if (mode === "change") {
+      router.push("/(tabs)/profile");
+    } else {
+      router.push("/signup");
+    }
   };
 
-  const renderPlan = (plan: Plan) => (
+  const renderPlan = (plan: Plan) => {
+    // Don't render current plan in change mode
+    if (mode === "change" && plan.id === currentPlan) {
+      return null;
+    }
+    
+    return (
     <View
       key={plan.id}
       style={[styles.planCard, plan.recommended && styles.recommendedCard]}
@@ -262,7 +281,8 @@ export default function PaymentPlan() {
         <Text style={styles.selectButtonText}>בחר תוכנית {plan.id}</Text>
       </TouchableOpacity>
     </View>
-  );
+    );
+  };
 
   const renderPaymentModal = () => (
     <Modal
@@ -420,13 +440,20 @@ export default function PaymentPlan() {
         </TouchableOpacity>
       </View>
       <View style={styles.header}>
-        <Text style={styles.title}>בחר את התוכנית שלך</Text>
+        <Text style={styles.title}>
+          {mode === "change" ? "שנה את התוכנית שלך" : "בחר את התוכנית שלך"}
+        </Text>
         <Text style={styles.subtitle}>
-          התחל במסע התזונתי שלך עם התוכנית המתאימה לך
+          {mode === "change" 
+            ? "בחר תוכנית חדשה שמתאימה לך יותר"
+            : "התחל במסע התזונתי שלך עם התוכנית המתאימה לך"
+          }
         </Text>
       </View>
 
-      <View style={styles.plansContainer}>{plans.map(renderPlan)}</View>
+      <View style={styles.plansContainer}>
+        {availablePlans.map(renderPlan)}
+      </View>
 
       <View style={styles.footer}>
         <Text style={styles.footerText}>

@@ -153,7 +153,7 @@ export class AuthService {
       console.log("🔑 EMAIL_PASSWORD value:", process.env.EMAIL_PASSWORD); // Temporary debug
       const nodemailer = require("nodemailer");
 
-      // Fixed: createTransport (not createTransporter)
+      // Create transporter with correct method name
       const transporter = nodemailer.createTransport({
         host: "smtp.gmail.com",
         port: 587,
@@ -470,7 +470,20 @@ export class AuthService {
 
     if (!user) {
       throw new Error("User not found");
-    }
+      // Generate verification code instead of token
+      const resetCode = crypto.randomInt(100000, 999999).toString();
+      
+      // Store code in database
+      await prisma.user.update({
+        where: { email },
+        data: {
+          email_verification_code: resetCode,
+          email_verification_expires: new Date(Date.now() + 15 * 60 * 1000), // 15 minutes
+        },
+      });
+      
+      // Send code via email
+      await this.sendPasswordResetCodeEmail(email, resetCode);
 
     if (!user.email_verified) {
       throw new Error("Please verify your email address first");
@@ -619,32 +632,28 @@ export class AuthService {
       };
 
       const result = await transporter.sendMail(mailOptions);
-      console.log(`✅ Password reset email sent to ${email}`);
+      console.log(`✅ Password reset code sent to ${email}`);
       console.log("📧 Message ID:", result.messageId);
 
       // Log to console for development
       if (process.env.NODE_ENV !== "production") {
-        console.log(`📧 Password reset email for ${email}`);
+        console.log(`📧 Password reset code for ${email}`);
         console.log(`👤 Name: ${user.name}`);
-        console.log(
-          `🔗 Reset Link: ${process.env.FRONTEND_URL}/reset-password?token=${resetToken}`
-        );
-        console.log(`⏰ Link expires in 15 minutes`);
+        console.log(`🔑 Reset Code: ${resetCode}`);
+        console.log(`⏰ Code expires in 15 minutes`);
       }
 
       return true;
     } catch (error: any) {
-      console.error("❌ Failed to send password reset email:", error, {
+      console.error("❌ Failed to send password reset code:", error, {
         email,
       });
 
       // Fallback to console logging if email fails
-      console.log(`📧 FALLBACK - Password reset email for ${email}`);
+      console.log(`📧 FALLBACK - Password reset code for ${email}`);
       console.log(`👤 Name: ${user.name}`);
-      console.log(
-        `🔗 Reset Link: ${process.env.FRONTEND_URL}/reset-password?token=${resetToken}`
-      );
-      console.log(`⏰ Link expires in 15 minutes`);
+      console.log(`🔑 Reset Code: ${resetCode}`);
+      console.log(`⏰ Code expires in 15 minutes`);
 
       return true;
     }
@@ -757,11 +766,11 @@ export class AuthService {
       if (!user || !user.email_verified) {
         throw new Error("User not found or email not verified");
       }
-
+        message: "Password reset code sent successfully",
       return { valid: true, email: decoded.email };
     } catch (error) {
       return {
-        valid: false,
+          error: "Failed to send password reset code",
         error: error instanceof Error ? error.message : "Invalid token",
       };
     }
@@ -776,7 +785,7 @@ export class AuthService {
     return permissions[role as keyof typeof permissions] ?? permissions.FREE;
   }
 
-  static getCookieOptions() {
+  static async sendPasswordResetCodeEmail(email: string, resetCode: string) {
     return {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
@@ -784,5 +793,4 @@ export class AuthService {
       maxAge: SESSION_EXPIRES_DAYS * 24 * 60 * 60 * 1000,
       path: "/",
     };
-  }
-}
+      const transporter = nodemailer.createTransport({

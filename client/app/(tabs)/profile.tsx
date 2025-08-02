@@ -90,7 +90,13 @@ export default function ProfileScreen() {
   };
 
   const handleChangePlan = () => {
-    router.push("/payment-plan");
+    router.push({
+      pathname: "/payment",
+      params: {
+        mode: "change",
+        currentPlan: user?.subscription_type || "FREE",
+      },
+    });
   };
 
   const handleExitPlan = () => {

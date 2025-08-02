@@ -1,417 +1,159 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   View,
   Text,
-  TouchableOpacity,
   StyleSheet,
   ScrollView,
+  TouchableOpacity,
   Alert,
+  ActivityIndicator,
   RefreshControl,
-  Animated,
   Dimensions,
+  Animated,
   Modal,
   TextInput,
-  Switch,
-  Pressable,
 } from "react-native";
-import { useRouter } from "expo-router";
-import { LinearGradient } from "expo-linear-gradient";
-import { BlurView } from "expo-blur";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { LinearGradient } from "expo-linear-gradient";
 import { useTranslation } from "react-i18next";
+import { useLanguage } from "@/src/i18n/context/LanguageContext";
+import { useTheme } from "@/src/context/ThemeContext";
 import {
+  ChefHat,
   Plus,
   Sparkles,
-  ChefHat,
-  Clock,
-  Users,
-  Heart,
-  Flame,
-  Leaf,
-  Star,
-  Settings,
-  X,
-  Check,
-  Search,
-  Filter,
-  ArrowRight,
   Calendar,
+  Clock,
   DollarSign,
+  Users,
+  Star,
+  Eye,
+  Play,
+  X,
+  Send,
   Utensils,
+  Target,
+  TrendingUp,
+  Award,
+  Filter,
+  Search,
 } from "lucide-react-native";
-import { api } from "../../src/services/api";
-import {
-  RecommendedMenu,
-  CustomMenuOptions,
-  AdvancedMenuRequest,
-} from "../../types/menu";
-import MenuCard from "../../components/MenuCard";
+import { api } from "@/src/services/api";
 import LoadingScreen from "@/components/LoadingScreen";
+import { router } from "expo-router";
 
-const { width: screenWidth, height: screenHeight } = Dimensions.get("window");
+const { width } = Dimensions.get("window");
 
-interface MealType {
-  id: string;
-  name: string;
-  nameHebrew: string;
-  icon: any;
-  description: string;
-  descriptionHebrew: string;
-  examples: string[];
-  examplesHebrew: string[];
-  color: string;
-  gradient: string[];
+interface RecommendedMenu {
+  menu_id: string;
+  title: string;
+  description?: string;
+  total_calories: number;
+  total_protein?: number;
+  total_carbs?: number;
+  total_fat?: number;
+  total_fiber?: number;
+  days_count: number;
+  dietary_category?: string;
+  estimated_cost?: number;
+  prep_time_minutes?: number;
+  difficulty_level: number;
+  is_active: boolean;
+  created_at: string;
+  meals: Array<{
+    meal_id: string;
+    name: string;
+    meal_type: string;
+    day_number: number;
+    calories: number;
+    protein: number;
+    carbs: number;
+    fat: number;
+    fiber?: number;
+    prep_time_minutes?: number;
+    cooking_method?: string;
+    instructions?: string;
+    ingredients: Array<{
+      ingredient_id: string;
+      name: string;
+      quantity: number;
+      unit: string;
+      category?: string;
+      estimated_cost?: number;
+    }>;
+  }>;
 }
 
-const MEAL_TYPES: MealType[] = [
-  {
-    id: "mediterranean",
-    name: "Mediterranean",
-    nameHebrew: "ים תיכוני",
-    icon: Heart,
-    description: "Fresh vegetables, olive oil, fish, and whole grains",
-    descriptionHebrew: "ירקות טריים, שמן זית, דגים ודגנים מלאים",
-    examples: ["Greek salad", "Grilled fish", "Hummus"],
-    examplesHebrew: ["סלט יווני", "דג צלוי", "חומוס"],
-    color: "#3B82F6",
-    gradient: ["#3B82F6", "#1D4ED8"],
-  },
-  {
-    id: "high_protein",
-    name: "High Protein",
-    nameHebrew: "עשיר בחלבון",
-    icon: Flame,
-    description: "Lean meats, eggs, dairy, and legumes for muscle building",
-    descriptionHebrew: "בשר רזה, ביצים, מוצרי חלב וקטניות לבניית שריר",
-    examples: ["Chicken breast", "Protein shake", "Greek yogurt"],
-    examplesHebrew: ["חזה עוף", "שייק חלבון", "יוגורט יווני"],
-    color: "#EF4444",
-    gradient: ["#EF4444", "#DC2626"],
-  },
-  {
-    id: "low_carb",
-    name: "Low Carb",
-    nameHebrew: "דל פחמימות",
-    icon: Leaf,
-    description: "Minimal carbs, focus on proteins and healthy fats",
-    descriptionHebrew: "מינימום פחמימות, דגש על חלבונים ושומנים בריאים",
-    examples: ["Cauliflower rice", "Zucchini noodles", "Avocado salad"],
-    examplesHebrew: ["אורז כרובית", "נודלס קישואים", "סלט אבוקדו"],
-    color: "#10B981",
-    gradient: ["#10B981", "#059669"],
-  },
-  {
-    id: "vegetarian",
-    name: "Vegetarian",
-    nameHebrew: "צמחוני",
-    icon: Leaf,
-    description: "Plant-based with dairy and eggs",
-    descriptionHebrew: "מבוסס צמחים עם מוצרי חלב וביצים",
-    examples: ["Veggie burger", "Pasta primavera", "Caprese salad"],
-    examplesHebrew: ["המבורגר צמחוני", "פסטה פרימוורה", "סלט קפרזה"],
-    color: "#22C55E",
-    gradient: ["#22C55E", "#16A34A"],
-  },
-  {
-    id: "vegan",
-    name: "Vegan",
-    nameHebrew: "טבעוני",
-    icon: Leaf,
-    description: "100% plant-based, no animal products",
-    descriptionHebrew: "100% צמחי, ללא מוצרים מן החי",
-    examples: ["Buddha bowl", "Lentil curry", "Quinoa salad"],
-    examplesHebrew: ["קערת בודהה", "קארי עדשים", "סלט קינואה"],
-    color: "#84CC16",
-    gradient: ["#84CC16", "#65A30D"],
-  },
-  {
-    id: "keto",
-    name: "Ketogenic",
-    nameHebrew: "קטוגני",
-    icon: Flame,
-    description: "Very low carb, high fat for ketosis",
-    descriptionHebrew: "מעט מאוד פחמימות, הרבה שומן לקטוזיס",
-    examples: ["Bacon and eggs", "Avocado bomb", "Cheese crisps"],
-    examplesHebrew: ["בייקון וביצים", "פצצת אבוקדו", "צ'יפס גבינה"],
-    color: "#F59E0B",
-    gradient: ["#F59E0B", "#D97706"],
-  },
-];
-
-const DIETARY_STYLES = [
-  { id: "balanced", name: "Balanced", nameHebrew: "מאוזן", icon: Star },
-  { id: "weight_loss", name: "Weight Loss", nameHebrew: "הרזיה", icon: Heart },
-  {
-    id: "muscle_gain",
-    name: "Muscle Gain",
-    nameHebrew: "בניית שריר",
-    icon: Flame,
-  },
-  {
-    id: "athletic",
-    name: "Athletic Performance",
-    nameHebrew: "ביצועים אתלטיים",
-    icon: Star,
-  },
-  {
-    id: "heart_healthy",
-    name: "Heart Healthy",
-    nameHebrew: "בריא ללב",
-    icon: Heart,
-  },
-  {
-    id: "diabetic",
-    name: "Diabetic Friendly",
-    nameHebrew: "מתאים לסוכרתיים",
-    icon: Leaf,
-  },
-];
-
-const COOKING_STYLES = [
-  { id: "quick", name: "Quick & Easy", nameHebrew: "מהיר וקל", icon: Clock },
-  { id: "gourmet", name: "Gourmet", nameHebrew: "גורמה", icon: ChefHat },
-  {
-    id: "one_pot",
-    name: "One Pot Meals",
-    nameHebrew: "ארוחות בסיר אחד",
-    icon: Utensils,
-  },
-  {
-    id: "meal_prep",
-    name: "Meal Prep",
-    nameHebrew: "הכנה מראש",
-    icon: Calendar,
-  },
-  { id: "no_cook", name: "No Cooking", nameHebrew: "ללא בישול", icon: Leaf },
-  { id: "grilled", name: "Grilled", nameHebrew: "על האש", icon: Flame },
-];
-
-const PREP_TIMES = [
-  { id: "15", name: "15 minutes", nameHebrew: "15 דקות" },
-  { id: "30", name: "30 minutes", nameHebrew: "30 דקות" },
-  { id: "45", name: "45 minutes", nameHebrew: "45 דקות" },
-  { id: "60", name: "1 hour", nameHebrew: "שעה" },
-  { id: "any", name: "Any time", nameHebrew: "כל משך זמן" },
-];
-
-const SERVING_SIZES = [
-  { id: "1", name: "1 person", nameHebrew: "אדם אחד" },
-  { id: "2", name: "2 people", nameHebrew: "2 אנשים" },
-  { id: "4", name: "4 people", nameHebrew: "4 אנשים" },
-  { id: "family", name: "Family (6+)", nameHebrew: "משפחה (6+)" },
-];
-
-const SPICE_LEVELS = [
-  { id: "mild", name: "Mild", nameHebrew: "עדין" },
-  { id: "medium", name: "Medium", nameHebrew: "בינוני" },
-  { id: "hot", name: "Hot", nameHebrew: "חריף" },
-  { id: "very_hot", name: "Very Hot", nameHebrew: "חריף מאוד" },
-];
-
-const COMMON_INGREDIENTS = [
-  { id: "chicken", name: "Chicken", nameHebrew: "עוף" },
-  { id: "beef", name: "Beef", nameHebrew: "בקר" },
-  { id: "fish", name: "Fish", nameHebrew: "דג" },
-  { id: "salmon", name: "Salmon", nameHebrew: "סלמון" },
-  { id: "eggs", name: "Eggs", nameHebrew: "ביצים" },
-  { id: "rice", name: "Rice", nameHebrew: "אורז" },
-  { id: "pasta", name: "Pasta", nameHebrew: "פסטה" },
-  { id: "quinoa", name: "Quinoa", nameHebrew: "קינואה" },
-  { id: "avocado", name: "Avocado", nameHebrew: "אבוקדו" },
-  { id: "spinach", name: "Spinach", nameHebrew: "תרד" },
-  { id: "tomatoes", name: "Tomatoes", nameHebrew: "עגבניות" },
-  { id: "broccoli", name: "Broccoli", nameHebrew: "ברוקולי" },
-  { id: "sweet_potato", name: "Sweet Potato", nameHebrew: "בטטה" },
-  { id: "tofu", name: "Tofu", nameHebrew: "טופו" },
-  { id: "lentils", name: "Lentils", nameHebrew: "עדשים" },
-  { id: "chickpeas", name: "Chickpeas", nameHebrew: "חומוס גרגרי" },
-  { id: "cheese", name: "Cheese", nameHebrew: "גבינה" },
-  { id: "yogurt", name: "Yogurt", nameHebrew: "יוגורט" },
-  { id: "nuts", name: "Nuts", nameHebrew: "אגוזים" },
-  { id: "olive_oil", name: "Olive Oil", nameHebrew: "שמן זית" },
-];
-
-const CUISINES = [
-  { id: "mediterranean", name: "Mediterranean", nameHebrew: "ים תיכוני" },
-  { id: "middle_eastern", name: "Middle Eastern", nameHebrew: "מזרח תיכוני" },
-  { id: "asian", name: "Asian", nameHebrew: "אסייתי" },
-  { id: "italian", name: "Italian", nameHebrew: "איטלקי" },
-  { id: "mexican", name: "Mexican", nameHebrew: "מקסיקני" },
-  { id: "indian", name: "Indian", nameHebrew: "הודי" },
-  { id: "french", name: "French", nameHebrew: "צרפתי" },
-  { id: "american", name: "American", nameHebrew: "אמריקאי" },
-  { id: "israeli", name: "Israeli", nameHebrew: "ישראלי" },
-  { id: "fusion", name: "Fusion", nameHebrew: "פיוז'ן" },
-];
-
-const HEALTH_GOALS = [
-  { id: "weight_loss", name: "Weight Loss", nameHebrew: "הרזיה" },
-  { id: "muscle_gain", name: "Muscle Gain", nameHebrew: "בניית שריר" },
-  { id: "maintenance", name: "Maintenance", nameHebrew: "שמירה" },
-  { id: "energy_boost", name: "Energy Boost", nameHebrew: "חיזוק אנרגיה" },
-  { id: "heart_health", name: "Heart Health", nameHebrew: "בריאות הלב" },
-  {
-    id: "digestive_health",
-    name: "Digestive Health",
-    nameHebrew: "בריאות העיכול",
-  },
-  { id: "immune_boost", name: "Immune Boost", nameHebrew: "חיזוק חיסוני" },
-  { id: "balanced", name: "Balanced", nameHebrew: "מאוזן" },
-];
-
-const ALLERGIES = [
-  { id: "gluten", name: "Gluten", nameHebrew: "גלוטן" },
-  { id: "dairy", name: "Dairy", nameHebrew: "חלב" },
-  { id: "nuts", name: "Nuts", nameHebrew: "אגוזים" },
-  { id: "shellfish", name: "Shellfish", nameHebrew: "פירות ים" },
-  { id: "eggs", name: "Eggs", nameHebrew: "ביצים" },
-  { id: "soy", name: "Soy", nameHebrew: "סויה" },
-  { id: "sesame", name: "Sesame", nameHebrew: "שומשום" },
-  { id: "fish", name: "Fish", nameHebrew: "דגים" },
-];
-
-const SPECIAL_DIETS = [
-  { id: "none", name: "None", nameHebrew: "רגיל" },
-  { id: "keto", name: "Ketogenic", nameHebrew: "קטוגני" },
-  { id: "paleo", name: "Paleo", nameHebrew: "פליאו" },
-  { id: "vegan", name: "Vegan", nameHebrew: "טבעוני" },
-  { id: "vegetarian", name: "Vegetarian", nameHebrew: "צמחוני" },
-  { id: "low_carb", name: "Low Carb", nameHebrew: "דל פחמימות" },
-  { id: "high_protein", name: "High Protein", nameHebrew: "עשיר חלבון" },
-  {
-    id: "intermittent_fasting",
-    name: "Intermittent Fasting",
-    nameHebrew: "צום לסירוגין",
-  },
-];
-
-const COOKING_METHODS = [
-  { id: "mixed", name: "Mixed Methods", nameHebrew: "שיטות מעורבות" },
-  { id: "grilling", name: "Grilling", nameHebrew: "צלייה" },
-  { id: "baking", name: "Baking", nameHebrew: "אפייה" },
-  { id: "steaming", name: "Steaming", nameHebrew: "קיטור" },
-  { id: "stir_fry", name: "Stir Fry", nameHebrew: "מוקפץ" },
-  { id: "raw", name: "Raw/No Cooking", nameHebrew: "ללא בישול" },
-  { id: "slow_cooking", name: "Slow Cooking", nameHebrew: "בישול איטי" },
-  { id: "pressure_cooking", name: "Pressure Cooking", nameHebrew: "סיר לחץ" },
-];
-
-const NUTRITION_FOCUS = [
-  { id: "balanced", name: "Balanced", nameHebrew: "מאוזן" },
-  { id: "high_protein", name: "High Protein", nameHebrew: "עשיר חלבון" },
-  { id: "low_carb", name: "Low Carb", nameHebrew: "דל פחמימות" },
-  { id: "high_fiber", name: "High Fiber", nameHebrew: "עשיר סיבים" },
-  {
-    id: "antioxidant_rich",
-    name: "Antioxidant Rich",
-    nameHebrew: "עשיר נוגדי חמצון",
-  },
-  { id: "omega_3", name: "Omega-3 Rich", nameHebrew: "עשיר אומגה 3" },
-  { id: "iron_rich", name: "Iron Rich", nameHebrew: "עשיר ברזל" },
-  { id: "calcium_rich", name: "Calcium Rich", nameHebrew: "עשיר סידן" },
-];
-
 export default function RecommendedMenusScreen() {
+  const { t } = useTranslation();
+  const { isRTL, language } = useLanguage();
+  const { colors, isDark } = useTheme();
+
   const [menus, setMenus] = useState<RecommendedMenu[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [fadeAnim] = useState(new Animated.Value(0));
-  const [slideAnim] = useState(new Animated.Value(50));
+  const [refreshing, setRefreshing] = useState(false);
   const [showCustomModal, setShowCustomModal] = useState(false);
-  const [showAdvancedModal, setShowAdvancedModal] = useState(false);
+  const [customRequest, setCustomRequest] = useState("");
+  const [selectedDays, setSelectedDays] = useState(7);
+  const [selectedMealsPerDay, setSelectedMealsPerDay] = useState("3_main");
+  const [budget, setBudget] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedFilter, setSelectedFilter] = useState("all");
 
-  const [customOptions, setCustomOptions] = useState<CustomMenuOptions>({
-    mealTypes: [],
-    dietaryStyle: "balanced",
-    cookingStyle: "quick",
-    prepTime: "30",
-    servingSize: "2",
-    spiceLevel: "mild",
-    ingredients: [],
-    avoidIngredients: [],
-    days: "7",
-    budget: "",
-  });
-
-  const [advancedRequest, setAdvancedRequest] = useState<AdvancedMenuRequest>({
-    mealName: "",
-    description: "",
-    cuisine: "mediterranean",
-    healthGoal: "balanced",
-    allergyFree: [],
-    specialDiet: "none",
-    cookingMethod: "mixed",
-    difficulty: "medium",
-    prepTime: "30",
-    servingSize: "2",
-    budget: "200",
-    includeSnacks: false,
-    mealTiming: "standard",
-    nutritionFocus: "balanced",
-    ingredients: {
-      mustInclude: [],
-      preferInclude: [],
-      mustAvoid: [],
-      preferAvoid: [],
-    },
-    customNotes: "",
-  });
-
-  const router = useRouter();
-  const { t, i18n } = useTranslation();
-  const isRTL = i18n.language === "he";
+  // Animation values
+  const [fadeAnim] = useState(new Animated.Value(0));
+  const [slideAnim] = useState(new Animated.Value(50));
 
   useEffect(() => {
-    loadMenus();
-
+    loadRecommendedMenus();
+    
+    // Start animations
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
-        duration: 1000,
+        duration: 800,
         useNativeDriver: true,
       }),
       Animated.timing(slideAnim, {
         toValue: 0,
-        duration: 1000,
+        duration: 600,
         useNativeDriver: true,
       }),
     ]).start();
   }, []);
 
-  const loadMenus = async () => {
+  const loadRecommendedMenus = async () => {
     try {
       console.log("🔄 Loading recommended menus...");
       const response = await api.get("/recommended-menus");
 
-      if (response.data.success && response.data.data) {
-        setMenus(response.data.data);
+      if (response.data.success) {
+        setMenus(response.data.data || []);
+        console.log("✅ Loaded", response.data.data?.length || 0, "menus");
       } else {
+        console.log("⚠️ No menus found or API returned error");
         setMenus([]);
       }
-    } catch (error: any) {
-      console.error("💥 Load menus error:", error);
-      Alert.alert(
-        isRTL ? "שגיאה" : "Error",
-        isRTL ? "לא ניתן לטעון את התפריטים" : "Failed to load recommended menus"
-      );
+    } catch (error) {
+      console.error("💥 Error loading menus:", error);
       setMenus([]);
     } finally {
       setIsLoading(false);
-      setIsRefreshing(false);
     }
   };
 
-  const onRefresh = () => {
-    setIsRefreshing(true);
-    loadMenus();
-  };
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadRecommendedMenus();
+    setRefreshing(false);
+  }, []);
 
-  const generateNewMenu = async () => {
-    setIsGenerating(true);
+  const handleGenerateMenu = async () => {
     try {
+      setIsGenerating(true);
+      console.log("🤖 Generating new menu...");
+
       const response = await api.post("/recommended-menus/generate", {
         days: 7,
         mealsPerDay: "3_main",
@@ -421,1087 +163,658 @@ export default function RecommendedMenusScreen() {
       });
 
       if (response.data.success) {
-        await loadMenus();
         Alert.alert(
-          isRTL ? "הצלחה" : "Success",
-          isRTL ? "תפריט חדש נוצר בהצלחה!" : "New menu generated successfully!"
+          language === "he" ? "הצלחה!" : "Success!",
+          language === "he" 
+            ? "תפריט חדש נוצר בהצלחה!"
+            : "New menu generated successfully!",
+          [
+            {
+              text: language === "he" ? "אישור" : "OK",
+              onPress: () => loadRecommendedMenus(),
+            },
+          ]
         );
       } else {
         throw new Error(response.data.error || "Failed to generate menu");
       }
     } catch (error: any) {
-      console.error("💥 Generate menu error:", error);
+      console.error("💥 Error generating menu:", error);
       Alert.alert(
-        isRTL ? "שגיאה" : "Error",
-        error.response?.data?.error ||
-          error.message ||
-          (isRTL ? "לא ניתן ליצור תפריט" : "Failed to generate menu")
+        language === "he" ? "שגיאה" : "Error",
+        error.message || (language === "he" 
+          ? "נכשל ביצירת תפריט חדש"
+          : "Failed to generate new menu")
       );
     } finally {
       setIsGenerating(false);
     }
   };
 
-  const generateCustomMenu = async () => {
-    if (customOptions.mealTypes.length === 0) {
+  const handleGenerateCustomMenu = async () => {
+    if (!customRequest.trim()) {
       Alert.alert(
-        isRTL ? "שגיאה" : "Error",
-        isRTL
-          ? "אנא בחר לפחות סוג ארוחה אחד"
-          : "Please select at least one meal type"
+        language === "he" ? "שגיאה" : "Error",
+        language === "he" 
+          ? "אנא הכנס תיאור לתפריט המותאם"
+          : "Please enter a description for the custom menu"
       );
       return;
     }
 
-    setIsGenerating(true);
-    setShowCustomModal(false);
-
     try {
-      const customRequest = buildCustomRequest();
+      setIsGenerating(true);
+      console.log("🎨 Generating custom menu...");
 
       const response = await api.post("/recommended-menus/generate-custom", {
-        days: parseInt(customOptions.days) || 7,
-        mealsPerDay: "3_main",
-        customRequest: customRequest,
-        budget: customOptions.budget
-          ? parseFloat(customOptions.budget)
-          : undefined,
+        days: selectedDays,
+        mealsPerDay: selectedMealsPerDay,
+        customRequest: customRequest.trim(),
+        budget: budget ? parseFloat(budget) : undefined,
         mealChangeFrequency: "daily",
         includeLeftovers: false,
         sameMealTimes: true,
       });
 
       if (response.data.success) {
-        await loadMenus();
+        setShowCustomModal(false);
+        setCustomRequest("");
+        setBudget("");
+        
         Alert.alert(
-          isRTL ? "הצלחה" : "Success",
-          isRTL
-            ? "התפריט המותאם שלך נוצר!"
-            : "Your custom menu has been generated!"
+          language === "he" ? "הצלחה!" : "Success!",
+          language === "he" 
+            ? "תפריט מותאם נוצר בהצלחה!"
+            : "Custom menu generated successfully!",
+          [
+            {
+              text: language === "he" ? "אישור" : "OK",
+              onPress: () => loadRecommendedMenus(),
+            },
+          ]
         );
-        resetCustomOptions();
       } else {
-        throw new Error(
-          response.data.error || "Failed to generate custom menu"
-        );
+        throw new Error(response.data.error || "Failed to generate custom menu");
       }
     } catch (error: any) {
-      console.error("💥 Generate custom menu error:", error);
+      console.error("💥 Error generating custom menu:", error);
       Alert.alert(
-        isRTL ? "שגיאה" : "Error",
-        error.response?.data?.error ||
-          error.message ||
-          (isRTL
-            ? "לא ניתן ליצור תפריט מותאם"
-            : "Failed to generate custom menu")
+        language === "he" ? "שגיאה" : "Error",
+        error.message || (language === "he" 
+          ? "נכשל ביצירת תפריט מותאם"
+          : "Failed to generate custom menu")
       );
     } finally {
       setIsGenerating(false);
     }
   };
 
-  const generateAdvancedMenu = async () => {
-    if (!advancedRequest.mealName.trim()) {
-      Alert.alert(
-        isRTL ? "שגיאה" : "Error",
-        isRTL ? "אנא הזן שם לארוחה" : "Please enter a meal name"
-      );
-      return;
-    }
-
-    setIsGenerating(true);
-    setShowAdvancedModal(false);
-
+  const handleStartMenu = async (menuId: string) => {
     try {
-      const advancedCustomRequest = buildAdvancedRequest();
-
-      const response = await api.post("/recommended-menus/generate-custom", {
-        days: 7,
-        mealsPerDay: "3_main",
-        customRequest: advancedCustomRequest,
-        budget: parseFloat(advancedRequest.budget) || 200,
-        mealChangeFrequency: "daily",
-        includeLeftovers: false,
-        sameMealTimes: true,
-      });
-
+      console.log("🚀 Starting menu:", menuId);
+      
+      const response = await api.post(`/recommended-menus/${menuId}/start-today`);
+      
       if (response.data.success) {
-        await loadMenus();
         Alert.alert(
-          isRTL ? "הצלחה" : "Success",
-          isRTL
-            ? "התפריט המתקדם שלך נוצר!"
-            : "Your advanced menu has been generated!"
-        );
-        resetAdvancedRequest();
-      } else {
-        throw new Error(
-          response.data.error || "Failed to generate advanced menu"
+          language === "he" ? "הצלחה!" : "Success!",
+          language === "he" 
+            ? "התפריט הופעל בהצלחה!"
+            : "Menu started successfully!",
+          [
+            {
+              text: language === "he" ? "אישור" : "OK",
+            },
+          ]
         );
       }
     } catch (error: any) {
-      console.error("💥 Generate advanced menu error:", error);
+      console.error("💥 Error starting menu:", error);
       Alert.alert(
-        isRTL ? "שגיאה" : "Error",
-        error.response?.data?.error ||
-          error.message ||
-          (isRTL
-            ? "לא ניתן ליצור תפריט מתקדם"
-            : "Failed to generate advanced menu")
+        language === "he" ? "שגיאה" : "Error",
+        error.message || (language === "he" 
+          ? "נכשל בהפעלת התפריט"
+          : "Failed to start menu")
       );
-    } finally {
-      setIsGenerating(false);
     }
   };
 
-  const buildCustomRequest = (): string => {
-    const selectedMealTypes = customOptions.mealTypes
-      .map((id: string) => {
-        const mealType = MEAL_TYPES.find((mt) => mt.id === id);
-        return isRTL ? mealType?.nameHebrew : mealType?.name;
-      })
-      .join(", ");
-
-    const dietaryStyle = DIETARY_STYLES.find(
-      (ds) => ds.id === customOptions.dietaryStyle
-    );
-    const cookingStyle = COOKING_STYLES.find(
-      (cs) => cs.id === customOptions.cookingStyle
-    );
-    const prepTime = PREP_TIMES.find((pt) => pt.id === customOptions.prepTime);
-    const servingSize = SERVING_SIZES.find(
-      (ss) => ss.id === customOptions.servingSize
-    );
-    const spiceLevel = SPICE_LEVELS.find(
-      (sl) => sl.id === customOptions.spiceLevel
-    );
-
-    const ingredients = customOptions.ingredients
-      .map((id: string) => {
-        const ingredient = COMMON_INGREDIENTS.find((ing) => ing.id === id);
-        return isRTL ? ingredient?.nameHebrew : ingredient?.name;
-      })
-      .join(", ");
-
-    const avoidIngredients = customOptions.avoidIngredients
-      .map((id: string) => {
-        const ingredient = COMMON_INGREDIENTS.find((ing) => ing.id === id);
-        return isRTL ? ingredient?.nameHebrew : ingredient?.name;
-      })
-      .join(", ");
-
-    let request = `Create ${selectedMealTypes} style meals with ${
-      isRTL ? dietaryStyle?.nameHebrew : dietaryStyle?.name
-    } approach. `;
-    request += `Cooking style: ${
-      isRTL ? cookingStyle?.nameHebrew : cookingStyle?.name
-    }. `;
-    request += `Prep time: maximum ${
-      isRTL ? prepTime?.nameHebrew : prepTime?.name
-    }. `;
-    request += `Serving size: ${
-      isRTL ? servingSize?.nameHebrew : servingSize?.name
-    }. `;
-    request += `Spice level: ${
-      isRTL ? spiceLevel?.nameHebrew : spiceLevel?.name
-    }. `;
-
-    if (ingredients) {
-      request += `Include these ingredients: ${ingredients}. `;
-    }
-
-    if (avoidIngredients) {
-      request += `Avoid these ingredients: ${avoidIngredients}. `;
-    }
-
-    return request;
-  };
-
-  const buildAdvancedRequest = (): string => {
-    const cuisine = CUISINES.find((c) => c.id === advancedRequest.cuisine);
-    const healthGoal = HEALTH_GOALS.find(
-      (hg) => hg.id === advancedRequest.healthGoal
-    );
-    const specialDiet = SPECIAL_DIETS.find(
-      (sd) => sd.id === advancedRequest.specialDiet
-    );
-    const cookingMethod = COOKING_METHODS.find(
-      (cm) => cm.id === advancedRequest.cookingMethod
-    );
-    const nutritionFocus = NUTRITION_FOCUS.find(
-      (nf) => nf.id === advancedRequest.nutritionFocus
-    );
-
-    const allergyFreeList = advancedRequest.allergyFree
-      .map((id: string) => {
-        const allergy = ALLERGIES.find((a) => a.id === id);
-        return isRTL ? allergy?.nameHebrew : allergy?.name;
-      })
-      .join(", ");
-
-    const mustIncludeIngredients = advancedRequest.ingredients.mustInclude
-      .map((id: string) => {
-        const ingredient = COMMON_INGREDIENTS.find((ing) => ing.id === id);
-        return isRTL ? ingredient?.nameHebrew : ingredient?.name;
-      })
-      .join(", ");
-
-    const mustAvoidIngredients = advancedRequest.ingredients.mustAvoid
-      .map((id: string) => {
-        const ingredient = COMMON_INGREDIENTS.find((ing) => ing.id === id);
-        return isRTL ? ingredient?.nameHebrew : ingredient?.name;
-      })
-      .join(", ");
-
-    let request = `Create a ${
-      advancedRequest.mealName
-    } inspired meal plan with ${
-      isRTL ? cuisine?.nameHebrew : cuisine?.name
-    } cuisine style. `;
-    request += `Health goal: ${
-      isRTL ? healthGoal?.nameHebrew : healthGoal?.name
-    }. `;
-
-    if (advancedRequest.description) {
-      request += `Description: ${advancedRequest.description}. `;
-    }
-
-    if (advancedRequest.specialDiet !== "none") {
-      request += `Special diet: ${
-        isRTL ? specialDiet?.nameHebrew : specialDiet?.name
-      }. `;
-    }
-
-    request += `Cooking method preference: ${
-      isRTL ? cookingMethod?.nameHebrew : cookingMethod?.name
-    }. `;
-    request += `Difficulty level: ${advancedRequest.difficulty}. `;
-    request += `Prep time: maximum ${advancedRequest.prepTime} minutes. `;
-    request += `Serving size: ${advancedRequest.servingSize} people. `;
-    request += `Nutrition focus: ${
-      isRTL ? nutritionFocus?.nameHebrew : nutritionFocus?.name
-    }. `;
-
-    if (allergyFreeList) {
-      request += `Must be free from: ${allergyFreeList}. `;
-    }
-
-    if (mustIncludeIngredients) {
-      request += `Must include these ingredients: ${mustIncludeIngredients}. `;
-    }
-
-    if (mustAvoidIngredients) {
-      request += `Avoid these ingredients: ${mustAvoidIngredients}. `;
-    }
-
-    if (advancedRequest.includeSnacks) {
-      request += `Include healthy snacks. `;
-    }
-
-    if (advancedRequest.customNotes) {
-      request += `Additional notes: ${advancedRequest.customNotes}. `;
-    }
-
-    return request;
-  };
-
-  const resetCustomOptions = () => {
-    setCustomOptions({
-      mealTypes: [],
-      dietaryStyle: "balanced",
-      cookingStyle: "quick",
-      prepTime: "30",
-      servingSize: "2",
-      spiceLevel: "mild",
-      ingredients: [],
-      avoidIngredients: [],
-      days: "7",
-      budget: "",
-    });
-  };
-
-  const resetAdvancedRequest = () => {
-    setAdvancedRequest({
-      mealName: "",
-      description: "",
-      cuisine: "mediterranean",
-      healthGoal: "balanced",
-      allergyFree: [],
-      specialDiet: "none",
-      cookingMethod: "mixed",
-      difficulty: "medium",
-      prepTime: "30",
-      servingSize: "2",
-      budget: "200",
-      includeSnacks: false,
-      mealTiming: "standard",
-      nutritionFocus: "balanced",
-      ingredients: {
-        mustInclude: [],
-        preferInclude: [],
-        mustAvoid: [],
-        preferAvoid: [],
-      },
-      customNotes: "",
-    });
-  };
-
-  const toggleMealType = (mealTypeId: string) => {
-    setCustomOptions((prev: { mealTypes: string[] }) => ({
-      ...prev,
-      mealTypes: prev.mealTypes.includes(mealTypeId)
-        ? prev.mealTypes.filter((id: string) => id !== mealTypeId)
-        : [...prev.mealTypes, mealTypeId],
-    }));
-  };
-
-  const toggleIngredient = (ingredientId: string, isAvoid: boolean = false) => {
-    const field = isAvoid ? "avoidIngredients" : "ingredients";
-    setCustomOptions((prev: { [x: string]: any }) => ({
-      ...prev,
-      [field]: prev[field].includes(ingredientId)
-        ? prev[field].filter((id: string) => id !== ingredientId)
-        : [...prev[field], ingredientId],
-    }));
-  };
-
-  const startMenu = async (menuId: string) => {
-    try {
-      const response = await api.post(
-        `/recommended-menus/${menuId}/start-today`
-      );
-
-      if (response.data.success) {
-        Alert.alert(
-          isRTL ? "הצלחה" : "Success",
-          isRTL ? "התפריט התחיל היום!" : "Menu started for today!"
-        );
-        await loadMenus();
-      } else {
-        throw new Error(response.data.error || "Failed to start menu");
+  const filteredMenus = useMemo(() => {
+    return menus.filter(menu => {
+      // Search filter
+      if (searchQuery.trim()) {
+        const query = searchQuery.toLowerCase();
+        const matchesSearch = 
+          menu.title.toLowerCase().includes(query) ||
+          menu.description?.toLowerCase().includes(query) ||
+          menu.dietary_category?.toLowerCase().includes(query);
+        if (!matchesSearch) return false;
       }
-    } catch (error: any) {
-      console.error("💥 Start menu error:", error);
-      Alert.alert(
-        isRTL ? "שגיאה" : "Error",
-        error.response?.data?.error ||
-          error.message ||
-          (isRTL ? "לא ניתן להתחיל תפריט" : "Failed to start menu")
-      );
-    }
-  };
 
-  const QuickActionCard = ({
-    title,
-    subtitle,
-    icon: Icon,
-    onPress,
-    color,
-    gradient,
-  }: any) => (
-    <Pressable
-      style={[styles.quickActionCard, { borderColor: color + "20" }]}
-      onPress={onPress}
-      android_ripple={{ color: color + "20" }}
-    >
-      <LinearGradient
-        colors={[`${color}10`, `${color}05`]}
-        style={styles.quickActionGradient}
-      >
-        <View
-          style={[styles.quickActionIcon, { backgroundColor: color + "15" }]}
-        >
-          <Icon size={24} color={color} strokeWidth={2.5} />
-        </View>
-        <View style={styles.quickActionContent}>
-          <Text style={[styles.quickActionTitle, isRTL && styles.rtlText]}>
-            {title}
-          </Text>
-          <Text style={[styles.quickActionSubtitle, isRTL && styles.rtlText]}>
-            {subtitle}
-          </Text>
-        </View>
-        <ArrowRight size={18} color={color} />
-      </LinearGradient>
-    </Pressable>
-  );
+      // Category filter
+      if (selectedFilter !== "all") {
+        if (selectedFilter === "recent" && menu.created_at) {
+          const menuDate = new Date(menu.created_at);
+          const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+          if (menuDate < weekAgo) return false;
+        } else if (selectedFilter === "high_protein") {
+          const proteinRatio = (menu.total_protein || 0) / (menu.total_calories || 1) * 4;
+          if (proteinRatio < 0.25) return false;
+        } else if (selectedFilter === "low_calorie") {
+          const avgCaloriesPerDay = menu.total_calories / (menu.days_count || 1);
+          if (avgCaloriesPerDay > 1800) return false;
+        }
+      }
 
-  const MealTypeCard = ({ mealType, isSelected, onPress }: any) => {
-    const IconComponent = mealType.icon;
+      return true;
+    });
+  }, [menus, searchQuery, selectedFilter]);
+
+  const renderMenuCard = (menu: RecommendedMenu, index: number) => {
+    const avgCaloriesPerDay = Math.round(menu.total_calories / (menu.days_count || 1));
+    const avgProteinPerDay = Math.round((menu.total_protein || 0) / (menu.days_count || 1));
+
     return (
-      <Pressable
+      <Animated.View
+        key={menu.menu_id}
         style={[
-          styles.mealTypeCard,
-          isSelected && [
-            styles.mealTypeCardSelected,
-            { borderColor: mealType.color },
-          ],
+          styles.menuCard,
+          {
+            backgroundColor: colors.card,
+            borderColor: colors.border,
+            opacity: fadeAnim,
+            transform: [
+              {
+                translateY: slideAnim.interpolate({
+                  inputRange: [0, 50],
+                  outputRange: [0, 50 + index * 10],
+                }),
+              },
+            ],
+          },
         ]}
-        onPress={onPress}
-        android_ripple={{ color: mealType.color + "20" }}
       >
+        {/* Header */}
         <LinearGradient
-          colors={isSelected ? mealType.gradient : ["#ffffff", "#fafafa"]}
-          style={styles.mealTypeCardGradient}
+          colors={isDark ? ["#047857", "#059669"] : ["#10b981", "#059669"]}
+          style={styles.cardHeader}
         >
-          <View
-            style={[
-              styles.mealTypeIcon,
-              { backgroundColor: mealType.color + "15" },
-            ]}
-          >
-            <IconComponent
-              size={28}
-              color={isSelected ? "#ffffff" : mealType.color}
-              strokeWidth={2}
-            />
-          </View>
-          <Text
-            style={[
-              styles.mealTypeTitle,
-              isSelected && styles.mealTypeTitleSelected,
-              isRTL && styles.rtlText,
-            ]}
-          >
-            {isRTL ? mealType.nameHebrew : mealType.name}
-          </Text>
-          <Text
-            style={[
-              styles.mealTypeDescription,
-              isSelected && styles.mealTypeDescriptionSelected,
-              isRTL && styles.rtlText,
-            ]}
-          >
-            {isRTL ? mealType.descriptionHebrew : mealType.description}
-          </Text>
-          {isSelected && (
-            <View style={styles.selectedBadge}>
-              <Check size={14} color="#ffffff" />
+          <View style={[styles.headerContent, isRTL && styles.rtlRow]}>
+            <View style={styles.headerLeft}>
+              <ChefHat size={24} color="#ffffff" />
+              <View style={styles.headerText}>
+                <Text style={[styles.menuTitle, isRTL && styles.rtlText]}>
+                  {menu.title}
+                </Text>
+                <Text style={[styles.menuDate, isRTL && styles.rtlText]}>
+                  {new Date(menu.created_at).toLocaleDateString(
+                    language === "he" ? "he-IL" : "en-US"
+                  )}
+                </Text>
+              </View>
             </View>
-          )}
+            <View style={styles.daysContainer}>
+              <Text style={styles.daysNumber}>{menu.days_count}</Text>
+              <Text style={styles.daysLabel}>
+                {language === "he" ? "ימים" : "days"}
+              </Text>
+            </View>
+          </View>
         </LinearGradient>
-      </Pressable>
+
+        {/* Content */}
+        <View style={styles.cardContent}>
+          {/* Description */}
+          {menu.description && (
+            <Text style={[styles.description, { color: colors.text }, isRTL && styles.rtlText]}>
+              {menu.description}
+            </Text>
+          )}
+
+          {/* Nutrition Summary */}
+          <View style={styles.nutritionSection}>
+            <Text style={[styles.sectionTitle, { color: colors.text }, isRTL && styles.rtlText]}>
+              {language === "he" ? "סיכום תזונתי יומי" : "Daily Nutrition Summary"}
+            </Text>
+            
+            <View style={styles.nutritionGrid}>
+              <View style={[styles.nutritionCard, { backgroundColor: colors.surface }]}>
+                <Target size={20} color="#ef4444" />
+                <Text style={[styles.nutritionValue, { color: colors.text }]}>
+                  {avgCaloriesPerDay}
+                </Text>
+                <Text style={[styles.nutritionLabel, { color: colors.icon }]}>
+                  {language === "he" ? "קלוריות" : "Calories"}
+                </Text>
+              </View>
+              
+              <View style={[styles.nutritionCard, { backgroundColor: colors.surface }]}>
+                <TrendingUp size={20} color="#3b82f6" />
+                <Text style={[styles.nutritionValue, { color: colors.text }]}>
+                  {avgProteinPerDay}g
+                </Text>
+                <Text style={[styles.nutritionLabel, { color: colors.icon }]}>
+                  {language === "he" ? "חלבון" : "Protein"}
+                </Text>
+              </View>
+              
+              <View style={[styles.nutritionCard, { backgroundColor: colors.surface }]}>
+                <Award size={20} color="#10b981" />
+                <Text style={[styles.nutritionValue, { color: colors.text }]}>
+                  {menu.meals.length}
+                </Text>
+                <Text style={[styles.nutritionLabel, { color: colors.icon }]}>
+                  {language === "he" ? "ארוחות" : "Meals"}
+                </Text>
+              </View>
+            </View>
+          </View>
+
+          {/* Meal Preview */}
+          <View style={styles.mealsPreview}>
+            <Text style={[styles.sectionTitle, { color: colors.text }, isRTL && styles.rtlText]}>
+              {language === "he" ? "ארוחות לדוגמה" : "Sample Meals"}
+            </Text>
+            
+            <ScrollView 
+              horizontal 
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.mealsScrollContainer}
+            >
+              {menu.meals.slice(0, 4).map((meal, mealIndex) => (
+                <View 
+                  key={meal.meal_id} 
+                  style={[styles.mealPreviewCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                >
+                  <Utensils size={16} color={colors.emerald500} />
+                  <Text 
+                    style={[styles.mealPreviewName, { color: colors.text }]}
+                    numberOfLines={2}
+                  >
+                    {meal.name}
+                  </Text>
+                  <Text style={[styles.mealPreviewCalories, { color: colors.emerald500 }]}>
+                    {meal.calories} {language === "he" ? "קלוריות" : "cal"}
+                  </Text>
+                </View>
+              ))}
+            </ScrollView>
+          </View>
+
+          {/* Cost and Time Info */}
+          <View style={styles.infoRow}>
+            {menu.estimated_cost && (
+              <View style={[styles.infoItem, isRTL && styles.rtlRow]}>
+                <DollarSign size={16} color={colors.icon} />
+                <Text style={[styles.infoText, { color: colors.text }]}>
+                  ₪{menu.estimated_cost.toFixed(0)}
+                </Text>
+              </View>
+            )}
+            
+            {menu.prep_time_minutes && (
+              <View style={[styles.infoItem, isRTL && styles.rtlRow]}>
+                <Clock size={16} color={colors.icon} />
+                <Text style={[styles.infoText, { color: colors.text }]}>
+                  {menu.prep_time_minutes} {language === "he" ? "דק'" : "min"}
+                </Text>
+              </View>
+            )}
+            
+            <View style={[styles.infoItem, isRTL && styles.rtlRow]}>
+              <Star size={16} color="#fbbf24" />
+              <Text style={[styles.infoText, { color: colors.text }]}>
+                {menu.difficulty_level}/5
+              </Text>
+            </View>
+          </View>
+
+          {/* Action Buttons */}
+          <View style={[styles.actionButtons, isRTL && styles.rtlRow]}>
+            <TouchableOpacity
+              style={[styles.secondaryButton, { borderColor: colors.emerald500 }]}
+              onPress={() => router.push(`/menu/${menu.menu_id}`)}
+            >
+              <Eye size={16} color={colors.emerald500} />
+              <Text style={[styles.secondaryButtonText, { color: colors.emerald500 }]}>
+                {language === "he" ? "צפה" : "View"}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.primaryButton, { backgroundColor: colors.emerald500 }]}
+              onPress={() => handleStartMenu(menu.menu_id)}
+            >
+              <Play size={16} color="#ffffff" />
+              <Text style={styles.primaryButtonText}>
+                {language === "he" ? "התחל" : "Start"}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Animated.View>
     );
   };
 
-  const OptionSelector = ({ options, selectedValue, onSelect, style }: any) => (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={style}>
-      <View style={styles.optionContainer}>
-        {options.map((option: any) => (
-          <Pressable
-            key={option.id}
-            style={[
-              styles.optionChip,
-              selectedValue === option.id && styles.optionChipSelected,
-            ]}
-            onPress={() => onSelect(option.id)}
-            android_ripple={{ color: "#3B82F620" }}
-          >
-            <Text
-              style={[
-                styles.optionText,
-                selectedValue === option.id && styles.optionTextSelected,
-                isRTL && styles.rtlText,
-              ]}
-            >
-              {isRTL ? option.nameHebrew : option.name}
+  const renderCustomModal = () => (
+    <Modal
+      visible={showCustomModal}
+      animationType="slide"
+      transparent={true}
+      onRequestClose={() => setShowCustomModal(false)}
+    >
+      <View style={styles.modalOverlay}>
+        <View style={[styles.modalContent, { backgroundColor: colors.background }]}>
+          <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>
+              {language === "he" ? "צור תפריט מותאם" : "Create Custom Menu"}
             </Text>
-          </Pressable>
-        ))}
+            <TouchableOpacity onPress={() => setShowCustomModal(false)}>
+              <X size={24} color={colors.icon} />
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView style={styles.modalBody}>
+            <View style={styles.inputGroup}>
+              <Text style={[styles.inputLabel, { color: colors.text }]}>
+                {language === "he" ? "תאר את התפריט הרצוי" : "Describe your desired menu"}
+              </Text>
+              <TextInput
+                style={[styles.textInput, { 
+                  backgroundColor: colors.card, 
+                  borderColor: colors.border,
+                  color: colors.text 
+                }]}
+                placeholder={language === "he" 
+                  ? "לדוגמה: תפריט ים תיכוני עם דגים ופחמימות מורכבות"
+                  : "e.g., Mediterranean menu with fish and complex carbs"
+                }
+                placeholderTextColor={colors.icon}
+                value={customRequest}
+                onChangeText={setCustomRequest}
+                multiline
+                numberOfLines={3}
+                textAlign={isRTL ? "right" : "left"}
+              />
+            </View>
+
+            <View style={styles.inputRow}>
+              <View style={[styles.inputGroup, { flex: 1, marginRight: isRTL ? 0 : 12, marginLeft: isRTL ? 12 : 0 }]}>
+                <Text style={[styles.inputLabel, { color: colors.text }]}>
+                  {language === "he" ? "מספר ימים" : "Number of days"}
+                </Text>
+                <View style={styles.daysSelector}>
+                  {[3, 7, 14].map(days => (
+                    <TouchableOpacity
+                      key={days}
+                      style={[
+                        styles.dayOption,
+                        { borderColor: colors.border },
+                        selectedDays === days && { backgroundColor: colors.emerald500 }
+                      ]}
+                      onPress={() => setSelectedDays(days)}
+                    >
+                      <Text style={[
+                        styles.dayOptionText,
+                        { color: selectedDays === days ? "#ffffff" : colors.text }
+                      ]}>
+                        {days}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+
+              <View style={[styles.inputGroup, { flex: 1 }]}>
+                <Text style={[styles.inputLabel, { color: colors.text }]}>
+                  {language === "he" ? "תקציב יומי (₪)" : "Daily budget (₪)"}
+                </Text>
+                <TextInput
+                  style={[styles.textInput, { 
+                    backgroundColor: colors.card, 
+                    borderColor: colors.border,
+                    color: colors.text 
+                  }]}
+                  placeholder="50"
+                  placeholderTextColor={colors.icon}
+                  value={budget}
+                  onChangeText={setBudget}
+                  keyboardType="numeric"
+                />
+              </View>
+            </View>
+          </ScrollView>
+
+          <View style={[styles.modalActions, { borderTopColor: colors.border }]}>
+            <TouchableOpacity
+              style={[styles.modalCancelButton, { backgroundColor: colors.card, borderColor: colors.border }]}
+              onPress={() => setShowCustomModal(false)}
+            >
+              <Text style={[styles.modalCancelText, { color: colors.text }]}>
+                {language === "he" ? "ביטול" : "Cancel"}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.modalCreateButton, { backgroundColor: colors.emerald500 }]}
+              onPress={handleGenerateCustomMenu}
+              disabled={isGenerating}
+            >
+              {isGenerating ? (
+                <ActivityIndicator size="small" color="#ffffff" />
+              ) : (
+                <>
+                  <Send size={16} color="#ffffff" />
+                  <Text style={styles.modalCreateText}>
+                    {language === "he" ? "צור" : "Create"}
+                  </Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
       </View>
-    </ScrollView>
+    </Modal>
   );
 
   if (isLoading) {
     return (
-      <LoadingScreen
-        text={isRTL ? "טוען את התפריטים שלך..." : "Loading your menus..."}
+      <LoadingScreen 
+        text={language === "he" ? "טוען תפריטים מומלצים..." : "Loading recommended menus..."} 
       />
     );
   }
 
   return (
-    <View style={styles.container}>
-      <SafeAreaView style={styles.safeArea}>
-        <Animated.View
-          style={[
-            styles.content,
-            {
-              opacity: fadeAnim,
-              transform: [{ translateY: slideAnim }],
-            },
-          ]}
-        >
-          {/* Modern Header */}
-          <View style={styles.header}>
-            <LinearGradient
-              colors={["#ffffff", "#fafafa"]}
-              style={styles.headerGradient}
-            >
-              <View style={[styles.headerTop, isRTL && styles.rtlRow]}>
-                <View style={styles.headerInfo}>
-                  <Text style={[styles.headerTitle, isRTL && styles.rtlText]}>
-                    {isRTL ? "תפריטים מותאמים" : "Smart Menus"}
-                  </Text>
-                  <Text
-                    style={[styles.headerSubtitle, isRTL && styles.rtlText]}
-                  >
-                    {isRTL
-                      ? `${menus.length} תפריטים זמינים`
-                      : `${menus.length} personalized plans`}
-                  </Text>
-                </View>
-                <View style={styles.headerActions}>
-                  <Pressable
-                    style={styles.headerActionButton}
-                    android_ripple={{ color: "#3B82F620" }}
-                  >
-                    <Search size={20} color="#64748b" />
-                  </Pressable>
-                  <Pressable
-                    style={styles.headerActionButton}
-                    android_ripple={{ color: "#3B82F620" }}
-                  >
-                    <Filter size={20} color="#64748b" />
-                  </Pressable>
-                </View>
-              </View>
-
-              {/* Quick Actions */}
-              <View style={styles.quickActions}>
-                <QuickActionCard
-                  title={isRTL ? "תפריט מהיר" : "Quick Menu"}
-                  subtitle={isRTL ? "יצירה מהירה" : "Fast generation"}
-                  icon={Plus}
-                  color="#3B82F6"
-                  onPress={generateNewMenu}
-                />
-                <QuickActionCard
-                  title={isRTL ? "תפריט מתקדם" : "Advanced Menu"}
-                  subtitle={isRTL ? "כל האפשרויות" : "Full control"}
-                  icon={Sparkles}
-                  color="#8B5CF6"
-                  onPress={() => setShowAdvancedModal(true)}
-                />
-              </View>
-            </LinearGradient>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+      {/* Header */}
+      <View style={[styles.header, { backgroundColor: colors.background }]}>
+        <View style={styles.headerTop}>
+          <View>
+            <Text style={[styles.title, { color: colors.text }, isRTL && styles.rtlText]}>
+              {language === "he" ? "תפריטים מומלצים" : "Recommended Menus"}
+            </Text>
+            <Text style={[styles.subtitle, { color: colors.icon }, isRTL && styles.rtlText]}>
+              {language === "he" 
+                ? "תפריטים מותאמים אישית עבורך"
+                : "Personalized menus created for you"
+              }
+            </Text>
           </View>
-
-          {/* Content */}
-          <ScrollView
-            style={styles.scrollView}
-            showsVerticalScrollIndicator={false}
-            refreshControl={
-              <RefreshControl
-                refreshing={isRefreshing}
-                onRefresh={onRefresh}
-                colors={["#3B82F6"]}
-                tintColor="#3B82F6"
-              />
-            }
+          
+          <TouchableOpacity
+            style={[styles.generateButton, { backgroundColor: colors.emerald500 }]}
+            onPress={() => setShowCustomModal(true)}
+            disabled={isGenerating}
           >
-            {menus.length === 0 ? (
-              <View style={styles.emptyState}>
-                <View style={styles.emptyCard}>
-                  <LinearGradient
-                    colors={["#ffffff", "#f8fafc"]}
-                    style={styles.emptyCardGradient}
-                  >
-                    <View style={styles.emptyIcon}>
-                      <ChefHat size={64} color="#cbd5e1" strokeWidth={1.5} />
-                    </View>
-                    <Text style={[styles.emptyTitle, isRTL && styles.rtlText]}>
-                      {isRTL ? "התחל ליצור תפריטים" : "Start Creating Menus"}
-                    </Text>
-                    <Text
-                      style={[styles.emptyDescription, isRTL && styles.rtlText]}
-                    >
-                      {isRTL
-                        ? "צור את התפריט המותאם הראשון שלך והתחל מסע תזונתי בריא"
-                        : "Create your first personalized menu and start your healthy nutrition journey"}
-                    </Text>
-                    <Pressable
-                      style={styles.emptyButton}
-                      onPress={() => setShowCustomModal(true)}
-                      android_ripple={{ color: "#3B82F620" }}
-                    >
-                      <LinearGradient
-                        colors={["#3B82F6", "#2563EB"]}
-                        style={styles.emptyButtonGradient}
-                      >
-                        <Plus size={20} color="#ffffff" />
-                        <Text
-                          style={[
-                            styles.emptyButtonText,
-                            isRTL && styles.rtlText,
-                          ]}
-                        >
-                          {isRTL ? "צור תפריט חדש" : "Create New Menu"}
-                        </Text>
-                      </LinearGradient>
-                    </Pressable>
-                  </LinearGradient>
-                </View>
-              </View>
+            {isGenerating ? (
+              <ActivityIndicator size="small" color="#ffffff" />
             ) : (
-              <View style={styles.menusList}>
-                {menus.map((menu, index) => (
-                  <MenuCard
-                    key={`menu-${menu.menu_id}-${index}`}
-                    menu={menu}
-                    isRTL={isRTL}
-                    onStart={startMenu}
-                    fadeAnim={fadeAnim}
-                    slideAnim={slideAnim}
-                    index={index}
-                  />
-                ))}
-              </View>
+              <Plus size={20} color="#ffffff" />
             )}
+          </TouchableOpacity>
+        </View>
+
+        {/* Search and Filter */}
+        <View style={styles.searchSection}>
+          <View style={[styles.searchContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <Search size={16} color={colors.icon} />
+            <TextInput
+              style={[styles.searchInput, { color: colors.text }]}
+              placeholder={language === "he" ? "חפש תפריטים..." : "Search menus..."}
+              placeholderTextColor={colors.icon}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              textAlign={isRTL ? "right" : "left"}
+            />
+          </View>
+
+          <ScrollView 
+            horizontal 
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.filtersContainer}
+          >
+            {[
+              { key: "all", label: language === "he" ? "הכל" : "All" },
+              { key: "recent", label: language === "he" ? "חדשים" : "Recent" },
+              { key: "high_protein", label: language === "he" ? "עתיר חלבון" : "High Protein" },
+              { key: "low_calorie", label: language === "he" ? "דל קלוריות" : "Low Calorie" },
+            ].map(filter => (
+              <TouchableOpacity
+                key={filter.key}
+                style={[
+                  styles.filterChip,
+                  { borderColor: colors.border },
+                  selectedFilter === filter.key && { backgroundColor: colors.emerald500 }
+                ]}
+                onPress={() => setSelectedFilter(filter.key)}
+              >
+                <Text style={[
+                  styles.filterChipText,
+                  { color: selectedFilter === filter.key ? "#ffffff" : colors.text }
+                ]}>
+                  {filter.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
           </ScrollView>
-        </Animated.View>
+        </View>
+      </View>
 
-        {/* Custom Menu Modal */}
-        <Modal
-          visible={showCustomModal}
-          animationType="slide"
-          transparent={true}
-          onRequestClose={() => setShowCustomModal(false)}
-        >
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalContainer}>
-              <BlurView intensity={100} style={styles.modalContent}>
-                <LinearGradient
-                  colors={["#ffffff", "#f8fafc"]}
-                  style={styles.modalGradient}
-                >
-                  {/* Modal Header */}
-                  <View style={[styles.modalHeader, isRTL && styles.rtlRow]}>
-                    <View style={styles.modalHeaderContent}>
-                      <Text
-                        style={[styles.modalTitle, isRTL && styles.rtlText]}
-                      >
-                        {isRTL ? "יצירת תפריט מותאם" : "Create Custom Menu"}
-                      </Text>
-                      <Text
-                        style={[styles.modalSubtitle, isRTL && styles.rtlText]}
-                      >
-                        {isRTL
-                          ? "התאם את התפריט לטעמך האישי"
-                          : "Customize your perfect meal plan"}
-                      </Text>
-                    </View>
-                    <Pressable
-                      style={styles.modalCloseButton}
-                      onPress={() => setShowCustomModal(false)}
-                      android_ripple={{ color: "#64748b20" }}
-                    >
-                      <X size={24} color="#64748b" />
-                    </Pressable>
+      {/* Content */}
+      <ScrollView
+        style={styles.content}
+        contentContainerStyle={styles.contentContainer}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[colors.emerald500]}
+            tintColor={colors.emerald500}
+          />
+        }
+      >
+        {filteredMenus.length > 0 ? (
+          <>
+            {/* Stats Overview */}
+            <View style={[styles.statsCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              <LinearGradient
+                colors={isDark ? ["#047857", "#059669"] : ["#ecfdf5", "#d1fae5"]}
+                style={styles.statsGradient}
+              >
+                <View style={styles.statsHeader}>
+                  <Sparkles size={20} color={colors.emerald500} />
+                  <Text style={[styles.statsTitle, { color: colors.emerald700 }]}>
+                    {language === "he" ? "הסטטיסטיקות שלך" : "Your Stats"}
+                  </Text>
+                </View>
+                
+                <View style={styles.statsGrid}>
+                  <View style={styles.statItem}>
+                    <Text style={[styles.statValue, { color: colors.emerald700 }]}>
+                      {filteredMenus.length}
+                    </Text>
+                    <Text style={[styles.statLabel, { color: colors.emerald600 }]}>
+                      {language === "he" ? "תפריטים" : "Menus"}
+                    </Text>
                   </View>
-
-                  <ScrollView
-                    style={styles.modalBody}
-                    showsVerticalScrollIndicator={false}
-                  >
-                    {/* Meal Types Selection */}
-                    <View style={styles.section}>
-                      <Text
-                        style={[styles.sectionTitle, isRTL && styles.rtlText]}
-                      >
-                        {isRTL ? "בחר סוגי ארוחות" : "Select Meal Types"}
-                      </Text>
-                      <View style={styles.mealTypesGrid}>
-                        {MEAL_TYPES.map((mealType) => (
-                          <MealTypeCard
-                            key={mealType.id}
-                            mealType={mealType}
-                            isSelected={customOptions.mealTypes.includes(
-                              mealType.id
-                            )}
-                            onPress={() => toggleMealType(mealType.id)}
-                          />
-                        ))}
-                      </View>
-                    </View>
-
-                    {/* Dietary Style */}
-                    <View style={styles.section}>
-                      <Text
-                        style={[styles.sectionTitle, isRTL && styles.rtlText]}
-                      >
-                        {isRTL ? "סגנון תזונה" : "Dietary Style"}
-                      </Text>
-                      <OptionSelector
-                        options={DIETARY_STYLES}
-                        selectedValue={customOptions.dietaryStyle}
-                        onSelect={(value: string) =>
-                          setCustomOptions((prev: any) => ({
-                            ...prev,
-                            dietaryStyle: value,
-                          }))
-                        }
-                      />
-                    </View>
-
-                    {/* Cooking Style */}
-                    <View style={styles.section}>
-                      <Text
-                        style={[styles.sectionTitle, isRTL && styles.rtlText]}
-                      >
-                        {isRTL ? "סגנון בישול" : "Cooking Style"}
-                      </Text>
-                      <OptionSelector
-                        options={COOKING_STYLES}
-                        selectedValue={customOptions.cookingStyle}
-                        onSelect={(value: string) =>
-                          setCustomOptions((prev: any) => ({
-                            ...prev,
-                            cookingStyle: value,
-                          }))
-                        }
-                      />
-                    </View>
-
-                    {/* Settings Grid */}
-                    <View style={styles.settingsGrid}>
-                      <View style={styles.settingCard}>
-                        <Text
-                          style={[styles.settingLabel, isRTL && styles.rtlText]}
-                        >
-                          {isRTL ? "זמן הכנה" : "Prep Time"}
-                        </Text>
-                        <OptionSelector
-                          options={PREP_TIMES}
-                          selectedValue={customOptions.prepTime}
-                          onSelect={(value: string) =>
-                            setCustomOptions((prev: any) => ({
-                              ...prev,
-                              prepTime: value,
-                            }))
-                          }
-                          style={styles.compactSelector}
-                        />
-                      </View>
-
-                      <View style={styles.settingCard}>
-                        <Text
-                          style={[styles.settingLabel, isRTL && styles.rtlText]}
-                        >
-                          {isRTL ? "גודל מנה" : "Serving Size"}
-                        </Text>
-                        <OptionSelector
-                          options={SERVING_SIZES}
-                          selectedValue={customOptions.servingSize}
-                          onSelect={(value: string) =>
-                            setCustomOptions((prev: any) => ({
-                              ...prev,
-                              servingSize: value,
-                            }))
-                          }
-                          style={styles.compactSelector}
-                        />
-                      </View>
-                    </View>
-
-                    {/* Generate Button */}
-                    <View style={styles.modalFooter}>
-                      <Pressable
-                        style={[
-                          styles.generateButton,
-                          customOptions.mealTypes.length === 0 &&
-                            styles.generateButtonDisabled,
-                        ]}
-                        onPress={generateCustomMenu}
-                        disabled={
-                          customOptions.mealTypes.length === 0 || isGenerating
-                        }
-                        android_ripple={{ color: "#ffffff20" }}
-                      >
-                        <LinearGradient
-                          colors={
-                            customOptions.mealTypes.length === 0
-                              ? ["#94a3b8", "#64748b"]
-                              : ["#3B82F6", "#2563EB"]
-                          }
-                          style={styles.generateButtonGradient}
-                        >
-                          {isGenerating ? (
-                            <LoadingScreen size="small" />
-                          ) : (
-                            <>
-                              <ChefHat size={20} color="#ffffff" />
-                              <Text
-                                style={[
-                                  styles.generateButtonText,
-                                  isRTL && styles.rtlText,
-                                ]}
-                              >
-                                {isRTL
-                                  ? "צור את התפריט שלי"
-                                  : "Generate My Menu"}
-                              </Text>
-                            </>
-                          )}
-                        </LinearGradient>
-                      </Pressable>
-                    </View>
-                  </ScrollView>
-                </LinearGradient>
-              </BlurView>
-            </View>
-          </View>
-        </Modal>
-
-        {/* Advanced Modal */}
-        <Modal
-          visible={showAdvancedModal}
-          animationType="slide"
-          transparent={true}
-          onRequestClose={() => setShowAdvancedModal(false)}
-        >
-          <View style={styles.modalOverlay}>
-            <View style={styles.advancedModalContainer}>
-              <BlurView intensity={100} style={styles.modalContent}>
-                <LinearGradient
-                  colors={["#ffffff", "#f8fafc"]}
-                  style={styles.modalGradient}
-                >
-                  {/* Advanced Modal Header */}
-                  <View style={[styles.modalHeader, isRTL && styles.rtlRow]}>
-                    <View style={styles.modalHeaderContent}>
-                      <Text
-                        style={[styles.modalTitle, isRTL && styles.rtlText]}
-                      >
-                        {isRTL ? "תפריט מתקדם" : "Advanced Menu"}
-                      </Text>
-                      <Text
-                        style={[styles.modalSubtitle, isRTL && styles.rtlText]}
-                      >
-                        {isRTL
-                          ? "שליטה מלאה על כל הפרטים"
-                          : "Complete control over every detail"}
-                      </Text>
-                    </View>
-                    <Pressable
-                      style={styles.modalCloseButton}
-                      onPress={() => setShowAdvancedModal(false)}
-                      android_ripple={{ color: "#64748b20" }}
-                    >
-                      <X size={24} color="#64748b" />
-                    </Pressable>
+                  
+                  <View style={styles.statItem}>
+                    <Text style={[styles.statValue, { color: colors.emerald700 }]}>
+                      {filteredMenus.reduce((sum, menu) => sum + menu.meals.length, 0)}
+                    </Text>
+                    <Text style={[styles.statLabel, { color: colors.emerald600 }]}>
+                      {language === "he" ? "ארוחות" : "Meals"}
+                    </Text>
                   </View>
-
-                  <ScrollView
-                    style={styles.modalBody}
-                    showsVerticalScrollIndicator={false}
-                  >
-                    {/* Meal Name Input */}
-                    <View style={styles.section}>
-                      <Text
-                        style={[styles.sectionTitle, isRTL && styles.rtlText]}
-                      >
-                        {isRTL ? "שם הארוחה" : "Meal Name"}
-                      </Text>
-                      <View style={styles.inputContainer}>
-                        <TextInput
-                          style={[styles.textInput, isRTL && styles.rtlText]}
-                          placeholder={
-                            isRTL ? "הזן שם לתפריט..." : "Enter menu name..."
-                          }
-                          value={advancedRequest.mealName}
-                          onChangeText={(text) =>
-                            setAdvancedRequest((prev: any) => ({
-                              ...prev,
-                              mealName: text,
-                            }))
-                          }
-                          placeholderTextColor="#94a3b8"
-                        />
-                      </View>
-                    </View>
-
-                    {/* Description */}
-                    <View style={styles.section}>
-                      <Text
-                        style={[styles.sectionTitle, isRTL && styles.rtlText]}
-                      >
-                        {isRTL ? "תיאור (אופציונלי)" : "Description (Optional)"}
-                      </Text>
-                      <View style={[styles.inputContainer, { height: 100 }]}>
-                        <TextInput
-                          style={[
-                            styles.textInput,
-                            { height: "100%", textAlignVertical: "top" },
-                            isRTL && styles.rtlText,
-                          ]}
-                          placeholder={
-                            isRTL
-                              ? "תאר את התפריט הרצוי..."
-                              : "Describe your desired menu..."
-                          }
-                          value={advancedRequest.description}
-                          onChangeText={(text) =>
-                            setAdvancedRequest((prev: any) => ({
-                              ...prev,
-                              description: text,
-                            }))
-                          }
-                          multiline
-                          placeholderTextColor="#94a3b8"
-                        />
-                      </View>
-                    </View>
-
-                    {/* Advanced Options */}
-                    <View style={styles.section}>
-                      <Text
-                        style={[styles.sectionTitle, isRTL && styles.rtlText]}
-                      >
-                        {isRTL ? "סגנון מטבח" : "Cuisine Style"}
-                      </Text>
-                      <OptionSelector
-                        options={CUISINES}
-                        selectedValue={advancedRequest.cuisine}
-                        onSelect={(value: string) =>
-                          setAdvancedRequest((prev: any) => ({
-                            ...prev,
-                            cuisine: value,
-                          }))
-                        }
-                      />
-                    </View>
-
-                    <View style={styles.section}>
-                      <Text
-                        style={[styles.sectionTitle, isRTL && styles.rtlText]}
-                      >
-                        {isRTL ? "מטרה בריאותית" : "Health Goal"}
-                      </Text>
-                      <OptionSelector
-                        options={HEALTH_GOALS}
-                        selectedValue={advancedRequest.healthGoal}
-                        onSelect={(value: string) =>
-                          setAdvancedRequest((prev: any) => ({
-                            ...prev,
-                            healthGoal: value,
-                          }))
-                        }
-                      />
-                    </View>
-
-                    {/* Include Snacks Toggle */}
-                    <View
-                      style={[styles.toggleContainer, isRTL && styles.rtlRow]}
-                    >
-                      <Text
-                        style={[styles.toggleLabel, isRTL && styles.rtlText]}
-                      >
-                        {isRTL
-                          ? "כלול חטיפים בריאים"
-                          : "Include Healthy Snacks"}
-                      </Text>
-                      <Switch
-                        value={advancedRequest.includeSnacks}
-                        onValueChange={(value) =>
-                          setAdvancedRequest((prev: any) => ({
-                            ...prev,
-                            includeSnacks: value,
-                          }))
-                        }
-                        trackColor={{ false: "#e2e8f0", true: "#3B82F6" }}
-                        thumbColor="#ffffff"
-                      />
-                    </View>
-
-                    {/* Generate Button */}
-                    <View style={styles.modalFooter}>
-                      <Pressable
-                        style={[
-                          styles.generateButton,
-                          !advancedRequest.mealName.trim() &&
-                            styles.generateButtonDisabled,
-                        ]}
-                        onPress={generateAdvancedMenu}
-                        disabled={
-                          !advancedRequest.mealName.trim() || isGenerating
-                        }
-                        android_ripple={{ color: "#ffffff20" }}
-                      >
-                        <LinearGradient
-                          colors={
-                            !advancedRequest.mealName.trim()
-                              ? ["#94a3b8", "#64748b"]
-                              : ["#8B5CF6", "#7C3AED"]
-                          }
-                          style={styles.generateButtonGradient}
-                        >
-                          {isGenerating ? (
-                            <LoadingScreen size="small" />
-                          ) : (
-                            <>
-                              <Sparkles size={20} color="#ffffff" />
-                              <Text
-                                style={[
-                                  styles.generateButtonText,
-                                  isRTL && styles.rtlText,
-                                ]}
-                              >
-                                {isRTL
-                                  ? "צור תפריט מתקדם"
-                                  : "Generate Advanced Menu"}
-                              </Text>
-                            </>
-                          )}
-                        </LinearGradient>
-                      </Pressable>
-                    </View>
-                  </ScrollView>
-                </LinearGradient>
-              </BlurView>
+                  
+                  <View style={styles.statItem}>
+                    <Text style={[styles.statValue, { color: colors.emerald700 }]}>
+                      {Math.round(filteredMenus.reduce((sum, menu) => sum + menu.total_calories, 0) / filteredMenus.length) || 0}
+                    </Text>
+                    <Text style={[styles.statLabel, { color: colors.emerald600 }]}>
+                      {language === "he" ? "קלוריות ממוצע" : "Avg Calories"}
+                    </Text>
+                  </View>
+                </View>
+              </LinearGradient>
             </View>
+
+            {/* Menu Cards */}
+            {filteredMenus.map(renderMenuCard)}
+          </>
+        ) : (
+          <View style={styles.emptyState}>
+            <ChefHat size={64} color={colors.icon} />
+            <Text style={[styles.emptyTitle, { color: colors.text }]}>
+              {language === "he" ? "אין תפריטים זמינים" : "No menus available"}
+            </Text>
+            <Text style={[styles.emptyText, { color: colors.icon }]}>
+              {language === "he" 
+                ? "צור תפריט מותאם אישית כדי להתחיל"
+                : "Create a custom menu to get started"
+              }
+            </Text>
+            
+            <TouchableOpacity
+              style={[styles.createFirstButton, { backgroundColor: colors.emerald500 }]}
+              onPress={() => setShowCustomModal(true)}
+            >
+              <Plus size={20} color="#ffffff" />
+              <Text style={styles.createFirstButtonText}>
+                {language === "he" ? "צור תפריט ראשון" : "Create First Menu"}
+              </Text>
+            </TouchableOpacity>
           </View>
-        </Modal>
-      </SafeAreaView>
-    </View>
+        )}
+      </ScrollView>
+
+      {/* Floating Action Button */}
+      <TouchableOpacity
+        style={[styles.fab, { backgroundColor: colors.emerald500 }]}
+        onPress={handleGenerateMenu}
+        disabled={isGenerating}
+      >
+        {isGenerating ? (
+          <ActivityIndicator size="small" color="#ffffff" />
+        ) : (
+          <Sparkles size={24} color="#ffffff" />
+        )}
+      </TouchableOpacity>
+
+      {renderCustomModal()}
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f8fafc",
   },
-  safeArea: {
-    flex: 1,
-  },
-  content: {
-    flex: 1,
-  },
-  rtlText: {
-    textAlign: "right",
-    writingDirection: "rtl",
-  },
-  rtlRow: {
-    flexDirection: "row-reverse",
-  },
-
-  // Header Styles
   header: {
-    marginHorizontal: 20,
-    marginTop: 20,
-    marginBottom: 24,
-    borderRadius: 24,
-    overflow: "hidden",
-    backgroundColor: "#ffffff",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 8,
-  },
-  headerGradient: {
-    padding: 24,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
   },
   headerTop: {
     flexDirection: "row",
@@ -1509,413 +822,406 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 20,
   },
-  headerInfo: {
-    flex: 1,
-  },
-  headerTitle: {
+  title: {
     fontSize: 28,
-    fontWeight: "800",
-    color: "#1e293b",
+    fontWeight: "bold",
     marginBottom: 4,
-    letterSpacing: -0.5,
   },
-  headerSubtitle: {
+  subtitle: {
     fontSize: 16,
-    color: "#64748b",
-    fontWeight: "500",
+    lineHeight: 22,
   },
-  headerActions: {
-    flexDirection: "row",
-    gap: 8,
-  },
-  headerActionButton: {
+  generateButton: {
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: "#3EBB9E",
     justifyContent: "center",
     alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 4,
   },
-
-  // Quick Actions
-  quickActions: {
+  searchSection: {
     gap: 12,
   },
-  quickActionCard: {
-    borderRadius: 16,
-    backgroundColor: "#ffffff",
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-    overflow: "hidden",
-  },
-  quickActionGradient: {
+  searchContainer: {
     flexDirection: "row",
     alignItems: "center",
-    padding: 16,
-    gap: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 10,
   },
-  quickActionIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  quickActionContent: {
+  searchInput: {
     flex: 1,
-  },
-  quickActionTitle: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#1e293b",
-    marginBottom: 2,
-  },
-  quickActionSubtitle: {
     fontSize: 14,
-    color: "#64748b",
+  },
+  filtersContainer: {
+    paddingRight: 20,
+    gap: 8,
+  },
+  filterChip: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  filterChipText: {
+    fontSize: 12,
     fontWeight: "500",
   },
-
-  // Content
-  scrollView: {
+  content: {
     flex: 1,
-    paddingHorizontal: 20,
   },
-
-  // Empty State
+  contentContainer: {
+    padding: 20,
+    paddingBottom: 100,
+  },
+  statsCard: {
+    borderRadius: 16,
+    marginBottom: 20,
+    overflow: "hidden",
+    borderWidth: 1,
+  },
+  statsGradient: {
+    padding: 20,
+  },
+  statsHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 16,
+    gap: 8,
+  },
+  statsTitle: {
+    fontSize: 18,
+    fontWeight: "600",
+  },
+  statsGrid: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+  },
+  statItem: {
+    alignItems: "center",
+  },
+  statValue: {
+    fontSize: 24,
+    fontWeight: "bold",
+    marginBottom: 4,
+  },
+  statLabel: {
+    fontSize: 12,
+    fontWeight: "500",
+  },
+  menuCard: {
+    borderRadius: 16,
+    marginBottom: 20,
+    overflow: "hidden",
+    borderWidth: 1,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  cardHeader: {
+    padding: 20,
+  },
+  headerContent: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  headerLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+  },
+  headerText: {
+    marginLeft: 12,
+    flex: 1,
+  },
+  menuTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#ffffff",
+    marginBottom: 4,
+  },
+  menuDate: {
+    fontSize: 12,
+    color: "rgba(255, 255, 255, 0.8)",
+  },
+  daysContainer: {
+    alignItems: "center",
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
+    borderRadius: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+  },
+  daysNumber: {
+    fontSize: 20,
+    fontWeight: "bold",
+    color: "#ffffff",
+  },
+  daysLabel: {
+    fontSize: 10,
+    color: "rgba(255, 255, 255, 0.8)",
+    fontWeight: "600",
+  },
+  cardContent: {
+    padding: 20,
+  },
+  description: {
+    fontSize: 14,
+    lineHeight: 20,
+    marginBottom: 16,
+    fontStyle: "italic",
+  },
+  nutritionSection: {
+    marginBottom: 20,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    marginBottom: 12,
+  },
+  nutritionGrid: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  nutritionCard: {
+    flex: 1,
+    alignItems: "center",
+    padding: 12,
+    borderRadius: 12,
+    gap: 4,
+  },
+  nutritionValue: {
+    fontSize: 18,
+    fontWeight: "bold",
+  },
+  nutritionLabel: {
+    fontSize: 10,
+    fontWeight: "500",
+    textTransform: "uppercase",
+  },
+  mealsPreview: {
+    marginBottom: 20,
+  },
+  mealsScrollContainer: {
+    paddingRight: 20,
+    gap: 12,
+  },
+  mealPreviewCard: {
+    width: 120,
+    padding: 12,
+    borderRadius: 12,
+    alignItems: "center",
+    borderWidth: 1,
+    gap: 6,
+  },
+  mealPreviewName: {
+    fontSize: 11,
+    fontWeight: "500",
+    textAlign: "center",
+    lineHeight: 14,
+  },
+  mealPreviewCalories: {
+    fontSize: 10,
+    fontWeight: "600",
+  },
+  infoRow: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+    marginBottom: 20,
+    paddingVertical: 12,
+  },
+  infoItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  infoText: {
+    fontSize: 12,
+    fontWeight: "500",
+  },
+  actionButtons: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  secondaryButton: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 6,
+  },
+  secondaryButtonText: {
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  primaryButton: {
+    flex: 2,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 12,
+    borderRadius: 12,
+    gap: 6,
+  },
+  primaryButtonText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#ffffff",
+  },
   emptyState: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
     paddingVertical: 60,
   },
-  emptyCard: {
-    borderRadius: 24,
-    backgroundColor: "#ffffff",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.1,
-    shadowRadius: 24,
-    elevation: 12,
-    overflow: "hidden",
+  emptyTitle: {
+    fontSize: 20,
+    fontWeight: "600",
+    marginTop: 16,
+    marginBottom: 8,
   },
-  emptyCardGradient: {
-    padding: 40,
-    alignItems: "center",
-    minWidth: screenWidth - 80,
-  },
-  emptyIcon: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: "#3EBB9E",
-    justifyContent: "center",
-    alignItems: "center",
+  emptyText: {
+    fontSize: 14,
+    textAlign: "center",
+    lineHeight: 20,
     marginBottom: 24,
   },
-  emptyTitle: {
-    fontSize: 24,
-    fontWeight: "800",
-    color: "#1e293b",
-    marginBottom: 8,
-    textAlign: "center",
-  },
-  emptyDescription: {
-    fontSize: 16,
-    color: "#64748b",
-    textAlign: "center",
-    lineHeight: 24,
-    marginBottom: 32,
-    maxWidth: 280,
-    fontWeight: "500",
-  },
-  emptyButton: {
-    borderRadius: 16,
-    overflow: "hidden",
-    shadowColor: "#3B82F6",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    elevation: 8,
-  },
-  emptyButtonGradient: {
+  createFirstButton: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 32,
-    paddingVertical: 16,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 12,
     gap: 8,
   },
-  emptyButtonText: {
+  createFirstButtonText: {
     fontSize: 16,
-    fontWeight: "700",
+    fontWeight: "600",
     color: "#ffffff",
   },
-
-  // Menus List
-  menusList: {
-    paddingBottom: 24,
+  fab: {
+    position: "absolute",
+    bottom: 20,
+    right: 20,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    justifyContent: "center",
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
   },
-
-  // Modal Styles
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0, 0, 0, 0.5)",
     justifyContent: "center",
     alignItems: "center",
   },
-  modalContainer: {
-    width: "92%",
-    maxHeight: "85%",
-    borderRadius: 24,
-    overflow: "hidden",
-  },
-  advancedModalContainer: {
-    width: "95%",
-    height: "90%",
-    borderRadius: 24,
-    overflow: "hidden",
-  },
   modalContent: {
-    flex: 1,
-    borderRadius: 24,
+    width: width - 40,
+    maxHeight: "80%",
+    borderRadius: 20,
     overflow: "hidden",
-    backgroundColor: "#ffffff",
-  },
-  modalGradient: {
-    flex: 1,
-    padding: 24,
   },
   modalHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 24,
-    paddingBottom: 20,
+    padding: 20,
     borderBottomWidth: 1,
-    borderBottomColor: "#e2e8f0",
-  },
-  modalHeaderContent: {
-    flex: 1,
   },
   modalTitle: {
-    fontSize: 24,
-    fontWeight: "800",
-    color: "#1e293b",
-    marginBottom: 4,
-  },
-  modalSubtitle: {
-    fontSize: 16,
-    color: "#64748b",
-    fontWeight: "500",
-  },
-  modalCloseButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "#3EBB9E",
-    justifyContent: "center",
-    alignItems: "center",
+    fontSize: 18,
+    fontWeight: "bold",
   },
   modalBody: {
-    flex: 1,
-  },
-
-  // Sections
-  section: {
-    marginBottom: 28,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#1e293b",
-    marginBottom: 16,
-  },
-
-  // Meal Types Grid
-  mealTypesGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 12,
-  },
-  mealTypeCard: {
-    width: (screenWidth - 88) / 2,
-    borderRadius: 20,
-    backgroundColor: "#ffffff",
-    borderWidth: 2,
-    borderColor: "#e2e8f0",
-    overflow: "hidden",
-  },
-  mealTypeCardSelected: {
-    borderWidth: 2,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 6,
-  },
-  mealTypeCardGradient: {
     padding: 20,
-    alignItems: "center",
-    minHeight: 140,
-    justifyContent: "center",
-    position: "relative",
+    maxHeight: 400,
   },
-  mealTypeIcon: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: 12,
+  inputGroup: {
+    marginBottom: 20,
   },
-  mealTypeTitle: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#1e293b",
-    textAlign: "center",
-    marginBottom: 8,
-  },
-  mealTypeTitleSelected: {
-    color: "#ffffff",
-  },
-  mealTypeDescription: {
-    fontSize: 12,
-    color: "#64748b",
-    textAlign: "center",
-    lineHeight: 16,
-    fontWeight: "500",
-  },
-  mealTypeDescriptionSelected: {
-    color: "#ffffff",
-    opacity: 0.9,
-  },
-  selectedBadge: {
-    position: "absolute",
-    top: 12,
-    right: 12,
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: "rgba(255, 255, 255, 0.3)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-
-  // Options
-  optionContainer: {
-    flexDirection: "row",
-    gap: 8,
-    paddingHorizontal: 4,
-  },
-  optionChip: {
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 20,
-    backgroundColor: "#3EBB9E",
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-  },
-  optionChipSelected: {
-    backgroundColor: "#3B82F6",
-    borderColor: "#3B82F6",
-  },
-  optionText: {
+  inputLabel: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#64748b",
-  },
-  optionTextSelected: {
-    color: "#ffffff",
-  },
-  compactSelector: {
-    marginTop: 8,
-  },
-
-  // Settings
-  settingsGrid: {
-    gap: 16,
-    marginBottom: 28,
-  },
-  settingCard: {
-    backgroundColor: "#ffffff",
-    borderRadius: 16,
-    padding: 20,
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-  },
-  settingLabel: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#1e293b",
-    marginBottom: 12,
-  },
-
-  // Inputs
-  inputContainer: {
-    backgroundColor: "#f8fafc",
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    marginBottom: 8,
   },
   textInput: {
-    fontSize: 16,
-    color: "#1e293b",
-    fontWeight: "500",
-  },
-
-  // Toggle
-  toggleContainer: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    backgroundColor: "#ffffff",
-    borderRadius: 16,
-    padding: 20,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
-    marginBottom: 28,
+    borderRadius: 12,
+    padding: 12,
+    fontSize: 14,
+    minHeight: 44,
   },
-  toggleLabel: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#1e293b",
+  inputRow: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  daysSelector: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  dayOption: {
     flex: 1,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignItems: "center",
   },
-
-  // Footer
-  modalFooter: {
-    marginTop: 32,
-    paddingTop: 24,
+  dayOptionText: {
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  modalActions: {
+    flexDirection: "row",
+    padding: 20,
     borderTopWidth: 1,
-    borderTopColor: "#e2e8f0",
+    gap: 12,
   },
-  generateButton: {
-    borderRadius: 16,
-    overflow: "hidden",
-    shadowColor: "#3B82F6",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    elevation: 8,
+  modalCancelButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: "center",
   },
-  generateButtonDisabled: {
-    shadowOpacity: 0,
-    elevation: 0,
+  modalCancelText: {
+    fontSize: 14,
+    fontWeight: "600",
   },
-  generateButtonGradient: {
+  modalCreateButton: {
+    flex: 2,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 18,
-    paddingHorizontal: 32,
-    gap: 12,
+    paddingVertical: 12,
+    borderRadius: 12,
+    gap: 6,
   },
-  generateButtonText: {
-    fontSize: 16,
-    fontWeight: "700",
+  modalCreateText: {
+    fontSize: 14,
+    fontWeight: "600",
     color: "#ffffff",
+  },
+  rtlText: {
+    textAlign: "right",
+    writingDirection: "rtl",
+  },
+  rtlRow: {
+    flexDirection: "row-reverse",
   },
 });

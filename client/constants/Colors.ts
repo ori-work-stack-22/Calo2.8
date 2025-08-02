@@ -19,6 +19,10 @@ export const Colors = {
     emerald500: "#059669",
     emerald600: "#047857",
     emerald700: "#065f46",
+    surface: "#ffffff",
+    onSurface: "#000000",
+    outline: "#e5e7eb",
+    shadow: "rgba(0, 0, 0, 0.1)",
   },
   dark: {
     text: "#ECEDEE",
@@ -36,5 +40,9 @@ export const Colors = {
     emerald500: "#047857",
     emerald600: "#065f46",
     emerald700: "#064e3b",
+    surface: "#1f2937",
+    onSurface: "#ECEDEE",
+    outline: "#374151",
+    shadow: "rgba(0, 0, 0, 0.3)",
   },
 };

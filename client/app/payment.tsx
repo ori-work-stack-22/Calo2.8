@@ -89,7 +89,7 @@ export default function PaymentScreen() {
   const router = useRouter();
   const dispatch = useDispatch<AppDispatch>();
   const { user } = useSelector((state: RootState) => state.auth);
-  const { planType, planName, planPrice } = useLocalSearchParams();
+  const { planType, planName, planPrice, mode, currentPlan } = useLocalSearchParams();
 
   const [paymentData, setPaymentData] = useState({
     cardNumber: "",
@@ -108,6 +108,25 @@ export default function PaymentScreen() {
   const [successAnimation] = useState(new Animated.Value(0));
 
   useEffect(() => {
+    // If in change mode, filter out current plan
+    if (mode === "change" && currentPlan) {
+      const availablePlans = [
+        { type: "FREE", name: "Free Plan", price: "Free" },
+        { type: "PREMIUM", name: "Premium Plan", price: "$49/month" },
+        { type: "GOLD", name: "Gold Plan", price: "$99/month" },
+      ].filter(plan => plan.type !== currentPlan);
+      
+      // If no plan selected yet, show plan selection
+      if (!planType) {
+        // Navigate to plan selection with filtered options
+        router.replace({
+          pathname: "/payment-plan",
+          params: { mode: "change", currentPlan },
+        });
+        return;
+      }
+    }
+    
     const detectedType = detectCardType(paymentData.cardNumber);
     setCardType(detectedType);
 
@@ -290,13 +309,21 @@ export default function PaymentScreen() {
       >
         <TouchableOpacity
           style={styles.backButton}
-          onPress={() => router.back()}
+          onPress={() => {
+            if (mode === "change") {
+              router.push("/(tabs)/profile");
+            } else {
+              router.back();
+            }
+          }}
         >
           <ArrowLeft size={24} color="white" />
         </TouchableOpacity>
 
         <View style={styles.headerContent}>
-          <Text style={styles.headerTitle}>Complete Your Payment</Text>
+          <Text style={styles.headerTitle}>
+            {mode === "change" ? "Change Your Plan" : "Complete Your Payment"}
+          </Text>
           <Text style={styles.headerSubtitle}>
             {planName} - {planPrice}
           </Text>
